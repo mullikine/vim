@@ -679,6 +679,24 @@ fm_getname(fmark_T *fmark, int lead_len)
 }
 
 /*
+ * Same as above, but always return filename.
+ */
+    char_u *
+fm_getnamealways(fmark)
+    fmark_T	*fmark;
+{
+    buf_T	*buf;
+    char_u	*dst;
+
+    buf = buflist_findnr(fmark->fnum);
+    if (buf == NULL)
+	return NULL;
+    dst = alloc((unsigned)STRLEN(buf->b_ffname)+1); //+1 for trailing '\0'
+    STRCPY(dst, buf->b_ffname);
+    return dst;
+}
+
+/*
  * Return the line at mark "mp".  Truncate to fit in window.
  * The returned string has been allocated.
  */
@@ -905,7 +923,10 @@ ex_jumps(exarg_T *eap UNUSED)
 	{
 	    if (curwin->w_jumplist[i].fmark.fnum == 0)
 		fname2fnum(&curwin->w_jumplist[i]);
-	    name = fm_getname(&curwin->w_jumplist[i].fmark, 16);
+	    //name = fm_getname(&curwin->w_jumplist[i].fmark, 16);
+	    name = fm_getnamealways(&curwin->w_jumplist[i].fmark);
+	    // at this stage, name could be a line of code rather than a
+	    // filename
 	    if (name == NULL)	    /* file name not available */
 		continue;
 
@@ -915,9 +936,10 @@ ex_jumps(exarg_T *eap UNUSED)
 		vim_free(name);
 		break;
 	    }
-	    sprintf((char *)IObuff, "%c %2d %5ld %4d ",
+	    sprintf((char *)IObuff, "%c %2d %2d %5ld %4d ",
 		i == curwin->w_jumplistidx ? '>' : ' ',
-		i > curwin->w_jumplistidx ? i - curwin->w_jumplistidx
+		i,
+		i > curwin->w_jumplistidx ? -(i - curwin->w_jumplistidx)
 					  : curwin->w_jumplistidx - i,
 		curwin->w_jumplist[i].fmark.mark.lnum,
 		curwin->w_jumplist[i].fmark.mark.col);

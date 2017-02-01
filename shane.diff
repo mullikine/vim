@@ -1,0 +1,189 @@
+diff --git a/src/mark.c b/src/mark.c
+index 842418c..bfdbe84 100644
+--- a/src/mark.c
++++ b/src/mark.c
+@@ -140,73 +140,54 @@ setmark_pos(c, pos, fnum)
+ ex_jd(eap)
+     exarg_T	*eap;
+ {
+-
+-    if (*eap->arg != NUL)
+-    {
+-        removecmark(eap->arg);
+-    }
+-}
+-
+-#ifdef FEAT_JUMPLIST
+-/*
+- * Remove matching context marks from the jump list.
+- */
+-    void
+-removecmark(name)
+-    char_u  *name;
+-{
+     int		i;
+     int		j;
+     FILE *fp;
+     win_T	*wp;
+     char * ret;
++    char_u	*fname;
++    regmatch_T	regmatch;
++
++    regmatch.regprog = vim_regcomp(eap->arg, RE_MAGIC + RE_STRING);
++    regmatch.rm_ic = FALSE; // ignore case
++    if (regmatch.regprog == NULL)
++    {
++	EMSG2(_(e_invarg2), eap->arg);
++	return;
++    }
+ 
++    cleanup_jumplist();
+     //wp = curwin;
+     FOR_ALL_WINDOWS(wp)
+     {
+         for (i = 0; i < wp->w_jumplistlen; ++i) {
+-            /* if matches name */
+-            /*fprintf(stderr, "jumplist %d\n", i);*/
+-            if (wp->w_jumplist[i].fname != NULL) {
+-                ret = strstr(wp->w_jumplist[i].fname, name);
++	    if (wp->w_jumplist[i].fmark.mark.lnum != 0)
++	    {
++	        if (wp->w_jumplist[i].fmark.fnum == 0)
++		    fname2fnum(&wp->w_jumplist[i]);
++	        fname = fm_getnamealways(&wp->w_jumplist[i].fmark);
++	        if (fname == NULL)	    /* file name not available */
++		    continue;
++                //ret = strstr(fname, eap->arg);
++                if (vim_regexec(&regmatch, (char_u *)fname, (colnr_T)0)) {
++                //if(ret != NULL) {
+                     if (wp->w_jumplist[i].fname != NULL) {
+-                        fp = fopen("/tmp/jumplist", "ab");
+-                        if (fp != NULL)
+-                        {
+-                            //fputs(wp->w_jumplist[i].fname, fp);
+-                            //fputs("hi\n", fp);
+-                            fputs(name, fp);
+-                            fputs("\t", fp);
+-                            fputs(wp->w_jumplist[i].fname, fp);
+-                if(ret != NULL) {
+-                            fputs("\t", fp);
+-                            fputs(ret, fp);
+-                    /* remove it */
+-	            vim_free(wp->w_jumplist[i].fname);
++	                vim_free(wp->w_jumplist[i].fname);
++	                wp->w_jumplist[i].fname = NULL;
++	            }
+ 	            for (j = i + 1; j < wp->w_jumplistlen; ++j) {
+ 	                wp->w_jumplist[j - 1] = wp->w_jumplist[j];
+ 	            }
++	            --i;
+ 	            --wp->w_jumplistlen;
+-	            /* set current to last if current mark was removed */
+-	            if (wp->w_jumplistidx == i) {
+-	                wp->w_jumplistidx = wp->w_jumplistlen - 1;
+-	            }
+-                } else {
+-                            fputs("\t", fp);
+-                            fputs("NO", fp);
++	            if (i <= wp->w_jumplistidx)
++                        --wp->w_jumplistidx;
++                    vim_free(fname);
+                 }
+-                            fputs("\n", fp);
+-                            //fprintf(fp, "%d", ret);
+-                            fclose(fp);
+-                        }
+-                    }
+-                //if (STRCMP(name, wp->w_jumplist[i].fname) == 0) {
+-                //}
+             }
+         }
+     }
+ }
+-#endif
+ 
+ /*
+  * Set the previous context mark to the current position and add it to the
+@@ -761,6 +742,24 @@ fm_getname(fmark, lead_len)
+ }
+ 
+ /*
++ * Same as above, but always return filename.
++ */
++    char_u *
++fm_getnamealways(fmark)
++    fmark_T	*fmark;
++{
++    buf_T	*buf;
++    char_u	*dst;
++
++    buf = buflist_findnr(fmark->fnum);
++    if (buf == NULL)
++	return NULL;
++    dst = alloc((unsigned)STRLEN(buf->b_ffname)+1); //+1 for trailing '\0'
++    STRCPY(dst, buf->b_ffname);
++    return dst;
++}
++
++/*
+  * Return the line at mark "mp".  Truncate to fit in window.
+  * The returned string has been allocated.
+  */
+@@ -989,7 +988,10 @@ ex_jumps(eap)
+ 	{
+ 	    if (curwin->w_jumplist[i].fmark.fnum == 0)
+ 		fname2fnum(&curwin->w_jumplist[i]);
+-	    name = fm_getname(&curwin->w_jumplist[i].fmark, 16);
++	    //name = fm_getname(&curwin->w_jumplist[i].fmark, 16);
++	    name = fm_getnamealways(&curwin->w_jumplist[i].fmark);
++	    // at this stage, name could be a line of code rather than a
++	    // filename
+ 	    if (name == NULL)	    /* file name not available */
+ 		continue;
+ 
+@@ -999,9 +1001,10 @@ ex_jumps(eap)
+ 		vim_free(name);
+ 		break;
+ 	    }
+-	    sprintf((char *)IObuff, "%c %2d %5ld %4d ",
++	    sprintf((char *)IObuff, "%c %2d %2d %5ld %4d ",
+ 		i == curwin->w_jumplistidx ? '>' : ' ',
+-		i > curwin->w_jumplistidx ? i - curwin->w_jumplistidx
++		i,
++		i > curwin->w_jumplistidx ? -(i - curwin->w_jumplistidx)
+ 					  : curwin->w_jumplistidx - i,
+ 		curwin->w_jumplist[i].fmark.mark.lnum,
+ 		curwin->w_jumplist[i].fmark.mark.col);
+diff --git a/src/proto/mark.pro b/src/proto/mark.pro
+index a6c66ad..f4fbba1 100644
+--- a/src/proto/mark.pro
++++ b/src/proto/mark.pro
+@@ -1,7 +1,6 @@
+ /* mark.c */
+ int setmark __ARGS((int c));
+ int setmark_pos __ARGS((int c, pos_T *pos, int fnum));
+-void removecmark __ARGS((char_u *name));
+ void setpcmark __ARGS((void));
+ void checkpcmark __ARGS((void));
+ pos_T *movemark __ARGS((int count));
+@@ -14,6 +13,7 @@ void fmarks_check_names __ARGS((buf_T *buf));
+ int check_mark __ARGS((pos_T *pos));
+ void clrallmarks __ARGS((buf_T *buf));
+ char_u *fm_getname __ARGS((fmark_T *fmark, int lead_len));
++char_u *fm_getnamealways __ARGS((fmark_T *fmark));
+ void do_marks __ARGS((exarg_T *eap));
+ void ex_delmarks __ARGS((exarg_T *eap));
+ void ex_jd __ARGS((exarg_T *eap));
+diff --git a/src/search.c b/src/search.c
+index efe9e1c..31fb020 100644
+--- a/src/search.c
++++ b/src/search.c
+@@ -2769,7 +2769,7 @@ startPS(lnum, para, both)
+ {
+     char_u	*s;
+ 
+-    s = ml_get(lnum);
++    s = skipwhite(ml_get(lnum));
+     if (*s == para || *s == '\f' || (both && *s == '}'))
+ 	return TRUE;
+     if (*s == '.' && (inmacro(p_sections, s + 1) ||
