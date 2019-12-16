@@ -668,6 +668,24 @@ fm_getname(fmark_T *fmark, int lead_len)
 }
 
 /*
+ * Same as above, but always return filename.
+ */
+    char_u *
+fm_getnamealways(fmark)
+    fmark_T	*fmark;
+{
+    buf_T	*buf;
+    char_u	*dst;
+
+    buf = buflist_findnr(fmark->fnum);
+    if (buf == NULL)
+	return NULL;
+    dst = alloc((unsigned)STRLEN(buf->b_ffname)+1); //+1 for trailing '\0'
+    STRCPY(dst, buf->b_ffname);
+    return dst;
+}
+
+/*
  * Return the line at mark "mp".  Truncate to fit in window.
  * The returned string has been allocated.
  */
