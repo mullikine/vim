@@ -34,9 +34,9 @@ if &filetype == "man"
     endif
     nnoremap <buffer> <Plug>ManBS :%s/.\b//g<CR>:setl nomod<CR>''
 
-    nnoremap <buffer> <c-]> :call <SID>PreGetPage(v:count)<CR>
-    nnoremap <buffer> <c-t> :call <SID>PopPage()<CR>
-    nnoremap <buffer> <silent> q :q<CR>
+    " nnoremap <buffer> <c-]> :call <SID>PreGetPage(v:count)<CR>
+    " nnoremap <buffer> <c-t> :call <SID>PopPage()<CR>
+    " nnoremap <buffer> <silent> q :q<CR>
 
     " Add undo commands for the maps
     let b:undo_ftplugin = b:undo_ftplugin
